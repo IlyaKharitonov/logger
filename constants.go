@@ -4,7 +4,7 @@ package logger
 const (
 	Info  = "info"
 	Debug = "debug"
-	Query = "query"
+	//Query = "query"
 	//Critical = "critical"
 	//Warning  = "warning"
 	Error = "error"

@@ -13,9 +13,9 @@ import (
 func (l *logger) listenChan(level string) {
 	defer l.wg.Done()
 	ch := l.getChan(level)
-	logs := make([]msgType, 0, l.limit)
+	logs := make([]msgType, 0, l.bufferCapacity)
 
-	//добавление логов в файл происходит порционно пачками равными размеру массива logs
+	//добавление логов в файл происходит пачками равными размеру массива logs
 	//экспериментальным путем выяснил, что эффективнее всего иметь размер такой пачки примерно 10-20 логов
 	//если в пачке меньше 10 логов мы дрочим лишний раз открытие файла (обращение к системе)
 	//если в пачке более 20 логов, например 1000, то получается слишком большой кусок данных,
@@ -37,17 +37,17 @@ func (l *logger) listenChan(level string) {
 			if len(logs) > 0 {
 				l.debug(fmt.Sprintf("%sсохраняю логги из полупустого слайса канала%s%s", darkPurple, level, noColor))
 				l.write(level, logs)
-				logs = make([]msgType, 0, l.limit)
+				logs = make([]msgType, 0, l.bufferCapacity)
 			}
 			//перезапускаю таймер
 			after = time.After(time.Second * 20)
 
 		//обычный сценарий который срабатывает при заполненности буфера
 		case log := <-ch:
-			if len(logs) == l.limit {
+			if len(logs) == l.bufferCapacity {
 				l.debug(fmt.Sprintf("%sсохраняю логги из слайса канала %s%s", red, level, noColor))
 				l.write(level, logs)
-				logs = make([]msgType, 0, l.limit)
+				logs = make([]msgType, 0, l.bufferCapacity)
 			}
 
 			logs = append(logs, log)
@@ -70,7 +70,7 @@ func (l *logger) saveBeforeExit(ch chan msgType, level string, logs []msgType) {
 }
 
 func (l *logger) saveFromChannel(ch chan msgType, level string) {
-	logs := make([]msgType, 0, l.limit)
+	logs := make([]msgType, 0, l.bufferCapacity)
 
 	//добавление логов в файл происходит порционно пачками равными размеру массива logs
 	//экспериментальным путем выяснил, что эффективнее всего иметь размер такой пачки примерно 10-20 логов
@@ -79,9 +79,9 @@ func (l *logger) saveFromChannel(ch chan msgType, level string) {
 	//который долго проходит этапы подготовки и долго записывается
 	for log := range ch {
 		//1 этап. если слайс заполнен, то записываем содержимое в файл и обнуляем массив
-		if len(logs) == l.limit {
+		if len(logs) == l.bufferCapacity {
 			l.write(level, logs)
-			logs = make([]msgType, 0, l.limit)
+			logs = make([]msgType, 0, l.bufferCapacity)
 		}
 
 		//2 этап.
@@ -174,24 +174,6 @@ func checkOccupancyChan(logChan chan msgType, limit int) bool {
 	return false
 }
 
-func (l *logger) needPrint(level string) bool {
-	for _, l := range l.printableLevels {
-		if l == level {
-			return true
-		}
-	}
-	return false
-}
-
-func (l *logger) needWrite(level string) bool {
-	for _, l := range l.recordableLevels {
-		if l == level {
-			return true
-		}
-	}
-	return false
-}
-
 func prepareMsg(msgText string) msgType {
 	return msgType{
 		TimeUTC: time.Now().Unix(),
@@ -205,14 +187,14 @@ func makeMessageColorful(level, msg string) string {
 		return darkGreen + level + ": " + noColor + msg
 	case Debug:
 		return blue + level + ": " + noColor + msg
-	case Query:
-		return orange + level + ": " + noColor + msg
+	case Error:
+		return red + level + ": " + noColor + msg
+	//case Query:
+	//	return orange + level + ": " + noColor + msg
 	//case Critical:
 	//	return darkBlue + level + ": " + noColor + msg
 	//case Warning:
 	//	return darkPurple + level + ": " + noColor + msg
-	case Error:
-		return red + level + ": " + noColor + msg
 	default:
 		return msg
 	}
@@ -224,14 +206,15 @@ func (l *logger) getChan(level string) chan msgType {
 		return l.infoChan
 	case Debug:
 		return l.debugChan
-	case Query:
-		return l.queryChan
+	case Error:
+		return l.errorChan
+	//case Query:
+	//	return l.queryChan
 	//case Critical:
 	//	return l.criticalChan
 	//case Warning:
 	//	return l.warningChan
-	case Error:
-		return l.errorChan
+
 	default:
 		return nil
 	}
@@ -242,22 +225,3 @@ func (l *logger) debug(msg string) {
 		fmt.Println(msg)
 	}
 }
-
-//func prepareQueryMsg(query string, args []interface{}) string {
-//	preparedQuery := strings.Join(strings.Fields(strings.ReplaceAll(query, "\n", "")), " ")
-//
-//	var argsStr []string
-//	for _, arg := range args {
-//
-//	}
-//
-//	return "Запрос: " + preparedQuery + "\n" + "Аргументы: "
-//}
-
-//func extractValue(arg interface{}) interface{} {
-//	if reflect.TypeOf(arg).Kind() == reflect.Ptr {
-//		return extractValue(arg)
-//	} else {
-//		return  reflect.TypeOf(arg
-//	}
-//}

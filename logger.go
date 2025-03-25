@@ -22,20 +22,25 @@ type ILogger interface {
 type logger struct {
 	infoChan  chan msgType
 	debugChan chan msgType
-	queryChan chan msgType
-	//criticalChan chan msgType
-	//warningChan  chan msgType
 	errorChan chan msgType
 
-	limit            int //предел заполненности слайса, после которого логги из него будут считаны и отправлены на сортировку
-	pathFolder       string
-	printableLevels  []string //Уровни, которые нужно распечатать в терминал
-	recordableLevels []string //Уровни, которые нужно записать в файл
-	colorHeadings    bool     //вкл/выкл покраску заголовков в файлах логов. покрашенные заголовки упрощают чтение лога из консоли
-	terminalLogs     bool
-	fileLogs         bool
+	bufferCapacity int //предел заполненности слайса, после которого логги из него будут считаны и отправлены на сортировку
+	chanCapacity   int
 
-	stop    bool
+	printInfo  bool
+	printError bool
+	printDebug bool
+
+	writeInfo  bool
+	writeError bool
+	writeDebug bool
+
+	pathFolder    string
+	colorHeadings bool //вкл/выкл покраску заголовков в файлах логов. покрашенные заголовки упрощают чтение лога из консоли
+	//terminalLogs  bool
+	//fileLogs      bool
+
+	//stop    bool
 	stopped chan struct{}
 	wg      *sync.WaitGroup
 	ctx     context.Context
@@ -49,20 +54,22 @@ func New(config *LoggerConf) *logger {
 	wg := &sync.WaitGroup{}
 
 	logger := &logger{
-		infoChan:  make(chan msgType, 1000),
-		debugChan: make(chan msgType, 1000),
-		queryChan: make(chan msgType, 1000),
-		//criticalChan: make(chan msgType, 1000),
-		//warningChan:  make(chan msgType, 1000),
-		errorChan: make(chan msgType, 1000),
+		infoChan:  make(chan msgType, config.ChanCapacity),
+		debugChan: make(chan msgType, config.ChanCapacity),
+		errorChan: make(chan msgType, config.ChanCapacity),
 
-		pathFolder:       config.PathFolder,
-		printableLevels:  config.PrintableLevels,
-		recordableLevels: config.RecordableLevels,
-		limit:            config.Limit,
-		colorHeadings:    config.ColorHeadings,
-		terminalLogs:     config.TerminalLogs,
-		fileLogs:         config.FileLogs,
+		printInfo:  config.PrintInfo,
+		printError: config.PrintError,
+		printDebug: config.PrintDebug,
+
+		writeInfo:  config.WriteInfo,
+		writeError: config.WriteError,
+		writeDebug: config.WriteDebug,
+
+		pathFolder:     config.PathFolder,
+		bufferCapacity: config.BufferCapacity,
+
+		colorHeadings: config.ColorHeadings,
 
 		wg:       wg,
 		stopped:  make(chan struct{}),
@@ -71,7 +78,7 @@ func New(config *LoggerConf) *logger {
 		debugLog: config.DebugLog,
 	}
 
-	if logger.fileLogs == true {
+	if logger.writeError == true || logger.writeInfo == true || logger.writeDebug == true {
 		go logger.StartProcessingLogs()
 	}
 
@@ -81,11 +88,25 @@ func New(config *LoggerConf) *logger {
 // читает из каналов логи и пишет их в слайсы, для дальнейшей обработки и записи
 func (l *logger) StartProcessingLogs() {
 	/*пуск горутин на каждый уровень логирования, указанный в конфигурации*/
-	for _, rl := range l.recordableLevels {
-		l.debug(fmt.Sprintf("пуск горутины для канала %s", rl))
+	if l.writeInfo == true {
+		l.debug(fmt.Sprintf("пуск горутины для канала %s", Info))
 
 		l.wg.Add(1)
-		go l.listenChan(rl)
+		go l.listenChan(Info)
+	}
+
+	if l.writeDebug == true {
+		l.debug(fmt.Sprintf("пуск горутины для канала %s", Debug))
+
+		l.wg.Add(1)
+		go l.listenChan(Debug)
+	}
+
+	if l.writeError == true {
+		l.debug(fmt.Sprintf("пуск горутины для канала %s", Error))
+
+		l.wg.Add(1)
+		go l.listenChan(Error)
 	}
 
 	l.debug("жду в вызывающей горутине")
@@ -99,9 +120,10 @@ func (l *logger) StartProcessingLogs() {
 
 // Stop() graceful stop
 func (l *logger) Stop() {
-	if l.fileLogs == false {
+	if l.writeError == false && l.writeInfo == false && l.writeDebug == false {
 		return
 	}
+
 	l.debug("отправляю сигнал на остановку")
 	l.cancel()
 	l.debug("жду завершения работы горутин")
@@ -111,73 +133,31 @@ func (l *logger) Stop() {
 }
 
 func (l *logger) Info(msg string) {
-	if l.terminalLogs == true && l.needPrint(Info) == true {
+	if l.printInfo == true {
 		fmt.Println(makeMessageColorful(Info, msg))
 	}
 
-	if l.fileLogs == true && l.needWrite(Info) == true {
+	if l.writeInfo == true {
 		l.infoChan <- prepareMsg(msg)
 	}
 }
 
 func (l *logger) Debug(msg string) {
-	if l.terminalLogs == true && l.needPrint(Debug) == true {
+	if l.printDebug == true {
 		fmt.Println(makeMessageColorful(Debug, msg))
 	}
 
-	if l.fileLogs == true && l.needWrite(Debug) == true {
+	if l.writeDebug == true {
 		l.debugChan <- prepareMsg(msg)
 	}
 }
 
-func (l *logger) Query(msg string) {
-	//сделать так, чтобы в запросе не было лишних пробелов и табуляций,
-	//чтобы аргументы были по значениям, а не указатели
-	//prepareQueryMsg(query, args)
-
-	if l.terminalLogs == true && l.needPrint(Query) == true {
-		fmt.Println(makeMessageColorful(Query, msg))
-	}
-
-	if l.fileLogs == true && l.needWrite(Query) == true {
-		l.queryChan <- prepareMsg(msg)
-	}
-}
-
-//func (l *logger) Critical(msg string) {
-//	if l.needPrint(Critical) == true {
-//		fmt.Println(makeMessageColorful(Critical, msg))
-//	}
-//
-//	if l.terminalOnly == true {
-//		return
-//	}
-//
-//	if l.needWrite(Critical) == true {
-//		l.criticalChan <- prepareMsg(msg)
-//	}
-//}
-//
-//func (l *logger) Warning(msg string) {
-//	if l.needPrint(Warning) == true {
-//		fmt.Println(makeMessageColorful(Warning, msg))
-//	}
-//
-//	if l.terminalOnly == true {
-//		return
-//	}
-//
-//	if l.needWrite(Warning) == true {
-//		l.warningChan <- prepareMsg(msg)
-//	}
-//}
-
 func (l *logger) Error(msg string) {
-	if l.terminalLogs == true && l.needPrint(Error) == true {
+	if l.printError == true {
 		fmt.Println(makeMessageColorful(Error, msg))
 	}
 
-	if l.fileLogs == true && l.needWrite(Error) == true {
+	if l.writeError == true {
 		l.errorChan <- prepareMsg(msg)
 	}
 }
