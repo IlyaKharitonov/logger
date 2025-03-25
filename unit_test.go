@@ -2,8 +2,8 @@ package logger
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/botNotebook/pkg/color"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -28,6 +28,25 @@ func TestSortLogs(t *testing.T) {
 
 }
 
+func TestAddParam(t *testing.T) {
+	config := &LoggerConf{
+		PathFolder:     "./logs",
+		PrintInfo:      true,
+		ChanCapacity:   100,
+		BufferCapacity: 10,
+		ColorHeadings:  true,
+		DebugLog:       false,
+	}
+
+	logger := New(config)
+
+	logger.Info("hello world", errors.New("Ошибочка вышла"),
+		logger.AddParam("param1", "value1"),
+		logger.AddParam("param2", "value2"),
+		logger.AddParam("param3", "value3"))
+
+}
+
 // тест логгера на корректную запись и сортировку поступающих логгов
 // выясняю не пропадают ли логги при большой нагрузке (40 воркеров, 100000 логов от каждого в каждый канал)
 // перед запуском теста не должно быть логов rm -R logs
@@ -38,12 +57,12 @@ func TestLogger(t *testing.T) {
 	//RecordableLevels: []string{Info, Debug, Warning, Critical, Error, Query},
 
 	config := &LoggerConf{
-		PathFolder:       "./logs",
-		PrintableLevels:  []string{},
-		RecordableLevels: []string{Info, Debug, Error, Query},
-		Limit:            15,
-		ColorHeadings:    true,
-		DebugLog:         false,
+		PathFolder: "./logs",
+		//PrintableLevels:  []string{},
+		//RecordableLevels: []string{Info, Debug, Error, Query},
+		//Limit:            15,
+		ColorHeadings: true,
+		DebugLog:      false,
 	}
 
 	logger := New(config)
@@ -74,7 +93,7 @@ func TestLogger(t *testing.T) {
 	c := strings.Count(string(dataInfo), "\n")
 
 	if c != numWorkers*numCircles {
-		t.Errorf("%v количество строк в info файле %d не равно ожидаемому количеству строк %d %v", color.RED, c, numWorkers*numCircles, color.NO_COLOR)
+		t.Errorf("%v количество строк в info файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
 	} else {
 		t.Log("Успех info!!!Строк", c)
 	}
@@ -85,7 +104,7 @@ func TestLogger(t *testing.T) {
 	//c = strings.Count(string(dataWarning), "\n")
 	//
 	//if c != numWorkers*numCircles {
-	//	t.Errorf("%v количество строк в warning файле %d не равно ожидаемому количеству строк %d %v", color.RED, c, numWorkers*numCircles, color.NO_COLOR)
+	//	t.Errorf("%v количество строк в warning файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
 	//} else {
 	//	t.Log("Успех warning!!!Строк", c)
 	//}
@@ -96,7 +115,7 @@ func TestLogger(t *testing.T) {
 	//c = strings.Count(string(dataCritical), "\n")
 	//
 	//if c != numWorkers*numCircles {
-	//	t.Errorf("%v количество строк в critical файле %d не равно ожидаемому количеству строк %d %v", color.RED, c, numWorkers*numCircles, color.NO_COLOR)
+	//	t.Errorf("%v количество строк в critical файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
 	//} else {
 	//	t.Log("Успех critical!!!Строк", c)
 	//}
@@ -107,7 +126,7 @@ func TestLogger(t *testing.T) {
 	c = strings.Count(string(dataError), "\n")
 
 	if c != numWorkers*numCircles {
-		t.Errorf("%v количество строк в error файле %d не равно ожидаемому количеству строк %d %v", color.RED, c, numWorkers*numCircles, color.NO_COLOR)
+		t.Errorf("%v количество строк в error файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
 	} else {
 		t.Log("Успех error!!!Строк", c)
 	}
@@ -118,7 +137,7 @@ func TestLogger(t *testing.T) {
 	c = strings.Count(string(dataDebug), "\n")
 
 	if c != numWorkers*numCircles {
-		t.Errorf("%v количество строк debug в файле %d не равно ожидаемому количеству строк %d %v", color.RED, c, numWorkers*numCircles, color.NO_COLOR)
+		t.Errorf("%v количество строк debug в файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
 	} else {
 		t.Log("Успех debug!!!Строк", c)
 	}
@@ -128,7 +147,7 @@ func TestLogger(t *testing.T) {
 	c = strings.Count(string(dataQuery), "\n")
 
 	if c != numWorkers*numCircles {
-		t.Errorf("%v количество строк query в файле %d не равно ожидаемому количеству строк %d %v", color.RED, c, numWorkers*numCircles, color.NO_COLOR)
+		t.Errorf("%v количество строк query в файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
 	} else {
 		t.Log("Успех query!!!Строк", c)
 	}
@@ -140,12 +159,12 @@ func workerImitation(num int, logger *logger, ctx context.Context, numCircles in
 	//имитация работы загрузки логгера в ходе работы воркера
 	for i := 1; i <= numCircles; i++ {
 
-		logger.Info("Запустил сервис. Горутина " + strconv.Itoa(num))
+		//logger.Info("Запустил сервис. Горутина " + strconv.Itoa(num))
 		//logger.Warning("Варнинг. Горутина " + strconv.Itoa(num))
 		//logger.Critical("У тебя ПАНИКА. Горутина " + strconv.Itoa(num))
 		logger.Error("Ошибка. Горутина " + strconv.Itoa(num))
 		logger.Debug("Дебаг. Горутина " + strconv.Itoa(num))
-		logger.Query("Запрос.Горутина " + strconv.Itoa(num))
+		//logger.Query("Запрос.Горутина " + strconv.Itoa(num))
 
 		//if i == numCircles {
 		//	fmt.Println("воркер", num, "отправил "+strconv.Itoa(numCircles)+" логов")

@@ -184,7 +184,7 @@ func prepareMsg(msgText string) msgType {
 func makeMessageColorful(level, msg string) string {
 	switch level {
 	case Info:
-		return darkGreen + level + ": " + noColor + msg
+		return darkGreen + "\nLevel: " + level + noColor + msg
 	case Debug:
 		return blue + level + ": " + noColor + msg
 	case Error:

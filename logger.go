@@ -3,7 +3,10 @@ package logger
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 type ILogger interface {
@@ -132,7 +135,26 @@ func (l *logger) Stop() {
 
 }
 
-func (l *logger) Info(msg string) {
+type arg struct {
+}
+
+func (l *logger) AddParam(key string, value interface{}) string {
+	return key + "=" + fmt.Sprint(value)
+}
+
+func (l *logger) Info(msg string, err error, params ...string) {
+	now := time.Now()
+	h, m, s := now.Clock()
+	y, month, d := now.Date()
+
+	msg = "\nData: " + strconv.Itoa(d) + "." + strconv.Itoa(int(month)) + "." + strconv.Itoa(y) + " " +
+		strconv.Itoa(h) + ":" + strconv.Itoa(m) + ":" + strconv.Itoa(s) + " " +
+		"\nMessage: " + msg + "\nParams: " + strings.Join(params, ", ")
+
+	if err != nil {
+		msg += "\nError: " + err.Error()
+	}
+
 	if l.printInfo == true {
 		fmt.Println(makeMessageColorful(Info, msg))
 	}
@@ -141,6 +163,16 @@ func (l *logger) Info(msg string) {
 		l.infoChan <- prepareMsg(msg)
 	}
 }
+
+//func (l *logger) Info(msg string) {
+//	if l.printInfo == true {
+//		fmt.Println(makeMessageColorful(Info, msg))
+//	}
+//
+//	if l.writeInfo == true {
+//		l.infoChan <- prepareMsg(msg)
+//	}
+//}
 
 func (l *logger) Debug(msg string) {
 	if l.printDebug == true {
