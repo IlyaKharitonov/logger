@@ -4,10 +4,12 @@ package logger
 const (
 	Info  = "info"
 	Debug = "debug"
-	//Query = "query"
-	//Critical = "critical"
-	//Warning  = "warning"
 	Error = "error"
+)
+
+const (
+	JSONFormat = "json"
+	TextFormat = "text"
 )
 
 //Цвет	Основной	Фон

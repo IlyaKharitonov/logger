@@ -11,6 +11,8 @@ type LoggerConf struct {
 	WriteError bool `env:"LOGGER_WRITE_ERROR"`
 	WriteDebug bool `env:"LOGGER_WRITE_DEBUG"`
 
+	WriteTimout    uint   `env:"LOGGER_WRITE_TIMEOUT"`
+	Format         string `env:"LOGGER_FORMAT"`          //формат логов (строка или джейсон)
 	BufferCapacity int    `env:"LOGGER_BUFFER_CAPACITY"` //размер буфера в который складываются логи пачкой из горутин перед записью в файл. похоже чем он меньше тем быстрее работает логгер
 	ChanCapacity   int    `env:"LOGGER_CHAN_CAPACITY"`   //размер каналов в которые поступают сообщения
 	ColorHeadings  bool   `env:"LOGGER_COLOR_HEADINGS"`  //раскрасить логи для лучшей визуализации

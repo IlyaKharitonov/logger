@@ -1,19 +1,21 @@
 package logger
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
 func (l *logger) listenChan(level string) {
 	defer l.wg.Done()
 	ch := l.getChan(level)
-	logs := make([]msgType, 0, l.bufferCapacity)
+	logs := make([]*recordType, 0, l.bufferCapacity)
 
 	//добавление логов в файл происходит пачками равными размеру массива logs
 	//экспериментальным путем выяснил, что эффективнее всего иметь размер такой пачки примерно 10-20 логов
@@ -21,7 +23,7 @@ func (l *logger) listenChan(level string) {
 	//если в пачке более 20 логов, например 1000, то получается слишком большой кусок данных,
 	//который долго проходит этапы подготовки и долго записывается
 
-	after := time.After(time.Second * 20)
+	after := time.After(time.Second * time.Duration(int(l.writeTimout)))
 
 	for {
 		select {
@@ -37,17 +39,17 @@ func (l *logger) listenChan(level string) {
 			if len(logs) > 0 {
 				l.debug(fmt.Sprintf("%sсохраняю логги из полупустого слайса канала%s%s", darkPurple, level, noColor))
 				l.write(level, logs)
-				logs = make([]msgType, 0, l.bufferCapacity)
+				logs = make([]*recordType, 0, l.bufferCapacity)
 			}
 			//перезапускаю таймер
-			after = time.After(time.Second * 20)
+			after = time.After(time.Second * time.Duration(int(l.writeTimout)))
 
 		//обычный сценарий который срабатывает при заполненности буфера
 		case log := <-ch:
 			if len(logs) == l.bufferCapacity {
 				l.debug(fmt.Sprintf("%sсохраняю логги из слайса канала %s%s", red, level, noColor))
 				l.write(level, logs)
-				logs = make([]msgType, 0, l.bufferCapacity)
+				logs = make([]*recordType, 0, l.bufferCapacity)
 			}
 
 			logs = append(logs, log)
@@ -57,7 +59,7 @@ func (l *logger) listenChan(level string) {
 }
 
 /*сохраняет оставшиеся логи из канала и слайса перед завершением работы*/
-func (l *logger) saveBeforeExit(ch chan msgType, level string, logs []msgType) {
+func (l *logger) saveBeforeExit(ch chan *recordType, level string, logs []*recordType) {
 	//сценарий если в слайсе на момент высова метода уже успели набежать логи
 	if len(logs) != 0 {
 		l.write(level, logs)
@@ -69,8 +71,8 @@ func (l *logger) saveBeforeExit(ch chan msgType, level string, logs []msgType) {
 	}
 }
 
-func (l *logger) saveFromChannel(ch chan msgType, level string) {
-	logs := make([]msgType, 0, l.bufferCapacity)
+func (l *logger) saveFromChannel(ch chan *recordType, level string) {
+	logs := make([]*recordType, 0, l.bufferCapacity)
 
 	//добавление логов в файл происходит порционно пачками равными размеру массива logs
 	//экспериментальным путем выяснил, что эффективнее всего иметь размер такой пачки примерно 10-20 логов
@@ -81,7 +83,7 @@ func (l *logger) saveFromChannel(ch chan msgType, level string) {
 		//1 этап. если слайс заполнен, то записываем содержимое в файл и обнуляем массив
 		if len(logs) == l.bufferCapacity {
 			l.write(level, logs)
-			logs = make([]msgType, 0, l.bufferCapacity)
+			logs = make([]*recordType, 0, l.bufferCapacity)
 		}
 
 		//2 этап.
@@ -106,10 +108,10 @@ func getFileName(level string) string {
 	return level + "_logs_" + strconv.Itoa(d) + "_" + m.String() + "_" + strconv.Itoa(y) + ".log"
 }
 
-func (l *logger) write(level string, msgList []msgType) {
+func (l *logger) write(level string, recordList []*recordType) {
 	var (
 		fileName    = getFileName(level)
-		msgByte     = l.prepareMsgB(msgList)
+		msgByte     = l.prepareRecordByte(recordList)
 		directories = path.Join(l.pathFolder, level)
 		pathFile    = path.Join(directories, fileName)
 	)
@@ -132,41 +134,75 @@ func (l *logger) write(level string, msgList []msgType) {
 }
 
 // подготавливает список логов к записи
-func (l *logger) prepareMsgB(msgList []msgType) []byte {
-	var (
-		msgStr        string
-		sortedMsgList = sortLogs(msgList)
-	)
+func (l *logger) prepareRecordByte(recordList []*recordType) []byte {
 
-	//fmt.Println(darkPurple, sortedMsgList, noColor)
+	sortedRecordList := sortLogs(recordList)
 
-	for _, m := range sortedMsgList {
-		t := strconv.Itoa(int(m.TimeUTC))
-
-		var msg string
-		if l.colorHeadings == true {
-			msg = darkGreen + "time: " + noColor + t + ", " + darkGreen + "message: " + noColor + m.Msg + "\n"
-		} else {
-			msg = "time: " + t + ", " + "message: " + m.Msg + "\n"
-		}
-
-		msgStr = msgStr + msg
+	if l.format == JSONFormat {
+		return l.prepareJSON(sortedRecordList)
 	}
 
-	return []byte(msgStr)
+	return l.prepareString(sortedRecordList)
+
+}
+
+func (l *logger) prepareJSON(recordList []*recordType) []byte {
+	var list []string
+
+	for _, r := range recordList {
+		json, err := json.Marshal(r)
+		if err != nil {
+			log.Fatal("(l *logger) prepareJSON ", err)
+		}
+
+		if len(list) == 0 {
+			list = append(list, "\n")
+		}
+
+		list = append(list, string(json))
+	}
+
+	return []byte(strings.Join(list, "\n"))
+}
+
+func (l *logger) prepareString(recordList []*recordType) []byte {
+	var list []string
+
+	for _, r := range recordList {
+		recordString :=
+			"Level: " + r.Level +
+				", Date: " + r.Date +
+				", Message: " + r.Message
+
+		if len(r.Params) != 0 {
+			recordString += ", Params: " + strings.Join(r.Params, ", ")
+		}
+
+		if r.Error != nil {
+			recordString += ", Error: " + *r.Error
+		}
+
+		if len(list) == 0 {
+			list = append(list, "\n")
+		}
+
+		list = append(list, recordString)
+	}
+
+	return []byte(strings.Join(list, "\n"))
 }
 
 // сортирует логги из канала. отдает упорядоченный по таймштампу массив логгов
-func sortLogs(msgList []msgType) []msgType {
-	sort.Slice(msgList, func(i, j int) (less bool) {
-		return msgList[i].TimeUTC < msgList[j].TimeUTC
+func sortLogs(recordList []*recordType) []*recordType {
+	sort.Slice(recordList, func(i, j int) (less bool) {
+		return recordList[i].TimeUTC < recordList[j].TimeUTC
 	})
 
-	return msgList
+	return recordList
 }
 
 // проверяет заполненность канала. если канал заполнен до лимита, то вернет true
-func checkOccupancyChan(logChan chan msgType, limit int) bool {
+func checkOccupancyChan(logChan chan recordType, limit int) bool {
 	if len(logChan) >= limit {
 		return true
 	}
@@ -174,21 +210,53 @@ func checkOccupancyChan(logChan chan msgType, limit int) bool {
 	return false
 }
 
-func prepareMsg(msgText string) msgType {
-	return msgType{
-		TimeUTC: time.Now().Unix(),
-		Msg:     msgText,
+func (l *logger) collectRecord(level string, msg string, err error, params ...string) *recordType {
+	now := time.Now()
+	date := now.Format("02.01.2006 15:04:05")
+
+	record := &recordType{
+		TimeUTC: now.Unix(),
+		Level:   level,
+		Date:    date,
+		Message: msg,
+		Params:  params,
 	}
+
+	if err != nil {
+		errStr := err.Error()
+		record.Error = &errStr
+	}
+
+	return record
 }
 
-func makeMessageColorful(level, msg string) string {
-	switch level {
+func (l *logger) prepareToPrint(record *recordType) string {
+	if l.colorHeadings == true {
+		return makeMessageColorful(record)
+	}
+
+	recordString :=
+		"\nLevel: " + record.Level +
+			"\nDate: " + record.Date +
+			"\nMessage: " + record.Message
+
+	if record.Error != nil {
+		recordString += "\nError: " + *record.Error
+	}
+
+	return recordString
+}
+
+func makeMessageColorful(record *recordType) string {
+	var color string
+
+	switch record.Level {
 	case Info:
-		return darkGreen + "\nLevel: " + level + noColor + msg
+		color = darkGreen
 	case Debug:
-		return blue + level + ": " + noColor + msg
+		color = blue
 	case Error:
-		return red + level + ": " + noColor + msg
+		color = red
 	//case Query:
 	//	return orange + level + ": " + noColor + msg
 	//case Critical:
@@ -196,11 +264,25 @@ func makeMessageColorful(level, msg string) string {
 	//case Warning:
 	//	return darkPurple + level + ": " + noColor + msg
 	default:
-		return msg
 	}
+
+	recordString :=
+		"\nLevel: " + color + record.Level + noColor +
+			"\nDate: " + record.Date +
+			"\nMessage: " + record.Message
+
+	if len(record.Params) != 0 {
+		recordString += "\nParams: " + strings.Join(record.Params, ", ")
+	}
+
+	if record.Error != nil {
+		recordString += "\nError: " + *record.Error
+	}
+
+	return recordString
 }
 
-func (l *logger) getChan(level string) chan msgType {
+func (l *logger) getChan(level string) chan *recordType {
 	switch level {
 	case Info:
 		return l.infoChan
@@ -222,6 +304,6 @@ func (l *logger) getChan(level string) chan msgType {
 
 func (l *logger) debug(msg string) {
 	if l.debugLog == true {
-		fmt.Println(msg)
+		fmt.Println("Дебагер логгера: ", msg)
 	}
 }

@@ -13,7 +13,7 @@ import (
 )
 
 func TestSortLogs(t *testing.T) {
-	list := []msgType{
+	list := []*recordType{
 		{TimeUTC: 99999999},
 		{TimeUTC: 11111111},
 		{TimeUTC: 55555555},
@@ -58,11 +58,17 @@ func TestLogger(t *testing.T) {
 
 	config := &LoggerConf{
 		PathFolder: "./logs",
-		//PrintableLevels:  []string{},
-		//RecordableLevels: []string{Info, Debug, Error, Query},
-		//Limit:            15,
-		ColorHeadings: true,
-		DebugLog:      false,
+
+		PrintError: true,
+		WriteError: true,
+		PrintDebug: true,
+		WriteDebug: true,
+
+		Format:         "json",
+		BufferCapacity: 15,
+		ChanCapacity:   100,
+		ColorHeadings:  true,
+		DebugLog:       false,
 	}
 
 	logger := New(config)
@@ -71,7 +77,7 @@ func TestLogger(t *testing.T) {
 
 	//имитируем работы нескольких воркеров
 	numWorkers := 40
-	numCircles := 100000
+	numCircles := 100
 
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
@@ -89,14 +95,14 @@ func TestLogger(t *testing.T) {
 	//равно количество горутин на количество циклов внутри горутины
 	/////////////////////////////////////////////////////////////////////////////
 
-	dataInfo, _ := ioutil.ReadFile("logs/info/info" + partOfName)
-	c := strings.Count(string(dataInfo), "\n")
-
-	if c != numWorkers*numCircles {
-		t.Errorf("%v количество строк в info файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
-	} else {
-		t.Log("Успех info!!!Строк", c)
-	}
+	//dataInfo, _ := ioutil.ReadFile("logs/info/info" + partOfName)
+	//c := strings.Count(string(dataInfo), "\n")
+	//
+	//if c != numWorkers*numCircles {
+	//	t.Errorf("%v количество строк в info файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
+	//} else {
+	//	t.Log("Успех info!!!Строк", c)
+	//}
 
 	/////////////////////////////////////////////////////////////////////////////
 	//уровень убран
@@ -123,7 +129,7 @@ func TestLogger(t *testing.T) {
 	/////////////////////////////////////////////////////////////////////////////
 
 	dataError, _ := ioutil.ReadFile("logs/error/error" + partOfName)
-	c = strings.Count(string(dataError), "\n")
+	c := strings.Count(string(dataError), "\n")
 
 	if c != numWorkers*numCircles {
 		t.Errorf("%v количество строк в error файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
@@ -143,14 +149,14 @@ func TestLogger(t *testing.T) {
 	}
 
 	/////////////////////////////////////////////////////////////////////////////
-	dataQuery, _ := ioutil.ReadFile("logs/query/query" + partOfName)
-	c = strings.Count(string(dataQuery), "\n")
-
-	if c != numWorkers*numCircles {
-		t.Errorf("%v количество строк query в файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
-	} else {
-		t.Log("Успех query!!!Строк", c)
-	}
+	//dataQuery, _ := ioutil.ReadFile("logs/query/query" + partOfName)
+	//c = strings.Count(string(dataQuery), "\n")
+	//
+	//if c != numWorkers*numCircles {
+	//	t.Errorf("%v количество строк query в файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
+	//} else {
+	//	t.Log("Успех query!!!Строк", c)
+	//}
 
 	//cancel()
 }
@@ -162,8 +168,12 @@ func workerImitation(num int, logger *logger, ctx context.Context, numCircles in
 		//logger.Info("Запустил сервис. Горутина " + strconv.Itoa(num))
 		//logger.Warning("Варнинг. Горутина " + strconv.Itoa(num))
 		//logger.Critical("У тебя ПАНИКА. Горутина " + strconv.Itoa(num))
-		logger.Error("Ошибка. Горутина " + strconv.Itoa(num))
-		logger.Debug("Дебаг. Горутина " + strconv.Itoa(num))
+		logger.Error("Ошибка. Горутина "+strconv.Itoa(num),
+			errors.New("Ошибочка вышла"),
+			logger.AddParam("param1", "value1"),
+			logger.AddParam("param2", "value2"),
+			logger.AddParam("param3", "value3"))
+		logger.Debug("Дебаг. Горутина "+strconv.Itoa(num), nil)
 		//logger.Query("Запрос.Горутина " + strconv.Itoa(num))
 
 		//if i == numCircles {

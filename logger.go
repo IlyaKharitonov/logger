@@ -3,29 +3,22 @@ package logger
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
+	"log"
 	"sync"
-	"time"
 )
 
 type ILogger interface {
 	Info(msg string)  //Информационные сообщения о ходе работы программы
 	Debug(msg string) //Сообщения отладки
-	//возможно доработать, чтобы он печатал запрос в удобной форме и с аргументами
-	Query(msg string) //Запросы в базу и тд. Возможно писать их в отдельный файл полезно
-	//Critical(msg string) //Что-то очень важное, например паника, ошибка внешнего сервиса. Может тоже убрать и все в уровне Error обрабатывать
-	//Warning(msg string)  //Предупреждение хз о чем. Возможно его убрать
 	Error(msg string) //Ошибка в ходе работы программы
-	//Fatal(msg string)
 
 	Stop()
 }
 
 type logger struct {
-	infoChan  chan msgType
-	debugChan chan msgType
-	errorChan chan msgType
+	infoChan  chan *recordType
+	debugChan chan *recordType
+	errorChan chan *recordType
 
 	bufferCapacity int //предел заполненности слайса, после которого логги из него будут считаны и отправлены на сортировку
 	chanCapacity   int
@@ -38,10 +31,10 @@ type logger struct {
 	writeError bool
 	writeDebug bool
 
+	format        string
+	writeTimout   uint
 	pathFolder    string
 	colorHeadings bool //вкл/выкл покраску заголовков в файлах логов. покрашенные заголовки упрощают чтение лога из консоли
-	//terminalLogs  bool
-	//fileLogs      bool
 
 	//stop    bool
 	stopped chan struct{}
@@ -56,10 +49,22 @@ func New(config *LoggerConf) *logger {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
+	if config.Format != JSONFormat && config.Format != TextFormat {
+		log.Fatal("Поле Format должно содержать 'text' или 'json'")
+	}
+
+	if config.BufferCapacity == 0 {
+		log.Fatal("Поле BufferCapacity должно быть больше нуля")
+	}
+
+	if config.ChanCapacity == 0 {
+		log.Fatal("Поле ChanCapacity должно быть больше нуля")
+	}
+
 	logger := &logger{
-		infoChan:  make(chan msgType, config.ChanCapacity),
-		debugChan: make(chan msgType, config.ChanCapacity),
-		errorChan: make(chan msgType, config.ChanCapacity),
+		infoChan:  make(chan *recordType, config.ChanCapacity),
+		debugChan: make(chan *recordType, config.ChanCapacity),
+		errorChan: make(chan *recordType, config.ChanCapacity),
 
 		printInfo:  config.PrintInfo,
 		printError: config.PrintError,
@@ -69,10 +74,11 @@ func New(config *LoggerConf) *logger {
 		writeError: config.WriteError,
 		writeDebug: config.WriteDebug,
 
+		writeTimout:    config.WriteTimout,
+		format:         config.Format,
 		pathFolder:     config.PathFolder,
 		bufferCapacity: config.BufferCapacity,
-
-		colorHeadings: config.ColorHeadings,
+		colorHeadings:  config.ColorHeadings,
 
 		wg:       wg,
 		stopped:  make(chan struct{}),
@@ -82,14 +88,14 @@ func New(config *LoggerConf) *logger {
 	}
 
 	if logger.writeError == true || logger.writeInfo == true || logger.writeDebug == true {
-		go logger.StartProcessingLogs()
+		go logger.startProcessingLogs()
 	}
 
 	return logger
 }
 
 // читает из каналов логи и пишет их в слайсы, для дальнейшей обработки и записи
-func (l *logger) StartProcessingLogs() {
+func (l *logger) startProcessingLogs() {
 	/*пуск горутин на каждый уровень логирования, указанный в конфигурации*/
 	if l.writeInfo == true {
 		l.debug(fmt.Sprintf("пуск горутины для канала %s", Info))
@@ -135,61 +141,42 @@ func (l *logger) Stop() {
 
 }
 
-type arg struct {
-}
-
 func (l *logger) AddParam(key string, value interface{}) string {
 	return key + "=" + fmt.Sprint(value)
 }
 
 func (l *logger) Info(msg string, err error, params ...string) {
-	now := time.Now()
-	h, m, s := now.Clock()
-	y, month, d := now.Date()
-
-	msg = "\nData: " + strconv.Itoa(d) + "." + strconv.Itoa(int(month)) + "." + strconv.Itoa(y) + " " +
-		strconv.Itoa(h) + ":" + strconv.Itoa(m) + ":" + strconv.Itoa(s) + " " +
-		"\nMessage: " + msg + "\nParams: " + strings.Join(params, ", ")
-
-	if err != nil {
-		msg += "\nError: " + err.Error()
-	}
+	record := l.collectRecord(Info, msg, err, params...)
 
 	if l.printInfo == true {
-		fmt.Println(makeMessageColorful(Info, msg))
+		fmt.Println(l.prepareToPrint(record))
 	}
 
 	if l.writeInfo == true {
-		l.infoChan <- prepareMsg(msg)
+		l.infoChan <- record
 	}
 }
 
-//func (l *logger) Info(msg string) {
-//	if l.printInfo == true {
-//		fmt.Println(makeMessageColorful(Info, msg))
-//	}
-//
-//	if l.writeInfo == true {
-//		l.infoChan <- prepareMsg(msg)
-//	}
-//}
+func (l *logger) Debug(msg string, err error, params ...string) {
+	record := l.collectRecord(Debug, msg, err, params...)
 
-func (l *logger) Debug(msg string) {
 	if l.printDebug == true {
-		fmt.Println(makeMessageColorful(Debug, msg))
+		fmt.Println(l.prepareToPrint(record))
 	}
 
 	if l.writeDebug == true {
-		l.debugChan <- prepareMsg(msg)
+		l.debugChan <- record
 	}
 }
 
-func (l *logger) Error(msg string) {
+func (l *logger) Error(msg string, err error, params ...string) {
+	record := l.collectRecord(Error, msg, err, params...)
+
 	if l.printError == true {
-		fmt.Println(makeMessageColorful(Error, msg))
+		fmt.Println(l.prepareToPrint(record))
 	}
 
 	if l.writeError == true {
-		l.errorChan <- prepareMsg(msg)
+		l.errorChan <- record
 	}
 }
