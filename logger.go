@@ -33,6 +33,7 @@ type logger struct {
 
 	format        string
 	writeTimout   uint
+	withoutWrite  bool
 	pathFolder    string
 	colorHeadings bool //вкл/выкл покраску заголовков в файлах логов. покрашенные заголовки упрощают чтение лога из консоли
 
@@ -87,7 +88,11 @@ func New(config *LoggerConf) *logger {
 		debugLog: config.DebugLog,
 	}
 
-	if logger.writeError == true || logger.writeInfo == true || logger.writeDebug == true {
+	if logger.writeError == false && logger.writeInfo == false && logger.writeDebug == false {
+		logger.withoutWrite = true
+	}
+
+	if logger.withoutWrite == false {
 		go logger.startProcessingLogs()
 	}
 
@@ -129,7 +134,7 @@ func (l *logger) startProcessingLogs() {
 
 // Stop() graceful stop
 func (l *logger) Stop() {
-	if l.writeError == false && l.writeInfo == false && l.writeDebug == false {
+	if l.withoutWrite == true {
 		return
 	}
 
@@ -138,7 +143,6 @@ func (l *logger) Stop() {
 	l.debug("жду завершения работы горутин")
 	<-l.stopped
 	l.debug("логгер завершил работу")
-
 }
 
 func (l *logger) AddParam(key string, value interface{}) string {

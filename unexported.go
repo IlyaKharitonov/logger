@@ -37,7 +37,7 @@ func (l *logger) listenChan(level string) {
 		//сценарий когда долго не поступало логов и буфер logs полупустой
 		case <-after:
 			if len(logs) > 0 {
-				l.debug(fmt.Sprintf("%sсохраняю логги из полупустого слайса канала%s%s", darkPurple, level, noColor))
+				l.debug(fmt.Sprintf("%sсохраняю логги из полупустого слайса канала %s%s", darkPurple, level, noColor))
 				l.write(level, logs)
 				logs = make([]*recordType, 0, l.bufferCapacity)
 			}

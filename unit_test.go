@@ -54,7 +54,6 @@ func TestAddParam(t *testing.T) {
 // TODO понять как влияет размер буфера в каналах на производительость
 // TODO понять как влияет размер слайса в горутине (Limit)
 func TestLogger(t *testing.T) {
-	//RecordableLevels: []string{Info, Debug, Warning, Critical, Error, Query},
 
 	config := &LoggerConf{
 		PathFolder: "./logs",
@@ -68,7 +67,7 @@ func TestLogger(t *testing.T) {
 		BufferCapacity: 15,
 		ChanCapacity:   100,
 		ColorHeadings:  true,
-		DebugLog:       false,
+		DebugLog:       true,
 	}
 
 	logger := New(config)
