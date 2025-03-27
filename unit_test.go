@@ -34,7 +34,7 @@ func TestAddParam(t *testing.T) {
 		PrintInfo:      true,
 		ChanCapacity:   100,
 		BufferCapacity: 10,
-		ColorHeadings:  true,
+		Color:          true,
 		DebugLog:       false,
 	}
 
@@ -66,7 +66,7 @@ func TestLogger(t *testing.T) {
 		Format:         "json",
 		BufferCapacity: 15,
 		ChanCapacity:   100,
-		ColorHeadings:  true,
+		Color:          true,
 		DebugLog:       true,
 	}
 
