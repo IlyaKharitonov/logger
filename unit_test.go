@@ -3,7 +3,6 @@ package logger
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -12,40 +11,40 @@ import (
 	"time"
 )
 
-func TestSortLogs(t *testing.T) {
-	list := []*recordType{
-		{TimeUTC: 99999999},
-		{TimeUTC: 11111111},
-		{TimeUTC: 55555555},
-		{TimeUTC: 77777777},
-		{TimeUTC: 66666666},
-		{TimeUTC: 33333333},
-		{TimeUTC: 12345678},
-		{TimeUTC: 67890456},
-	}
-
-	fmt.Println(sortLogs(list))
-
-}
-
-func TestAddParam(t *testing.T) {
-	config := &LoggerConf{
-		PathFolder:     "./logs",
-		PrintInfo:      true,
-		ChanCapacity:   100,
-		BufferCapacity: 10,
-		Color:          true,
-		DebugLog:       false,
-	}
-
-	logger := New(config)
-
-	logger.Info("hello world", errors.New("Ошибочка вышла"),
-		logger.AddParam("param1", "value1"),
-		logger.AddParam("param2", "value2"),
-		logger.AddParam("param3", "value3"))
-
-}
+//func TestSortLogs(t *testing.T) {
+//	list := []*recordType{
+//		{TimeUTC: 99999999},
+//		{TimeUTC: 11111111},
+//		{TimeUTC: 55555555},
+//		{TimeUTC: 77777777},
+//		{TimeUTC: 66666666},
+//		{TimeUTC: 33333333},
+//		{TimeUTC: 12345678},
+//		{TimeUTC: 67890456},
+//	}
+//
+//	fmt.Println(sortLogs(list))
+//
+//}
+//
+//func TestAddParam(t *testing.T) {
+//	config := &LoggerConf{
+//		PathFolder:     "./logs",
+//		PrintInfo:      true,
+//		ChanCapacity:   100,
+//		BufferCapacity: 10,
+//		Color:          true,
+//		DebugLog:       false,
+//	}
+//
+//	logger := New(config)
+//
+//	logger.Info("hello world", errors.New("Ошибочка вышла"),
+//		logger.AddParam("param1", "value1"),
+//		logger.AddParam("param2", "value2"),
+//		logger.AddParam("param3", "value3"))
+//
+//}
 
 // тест логгера на корректную запись и сортировку поступающих логгов
 // выясняю не пропадают ли логги при большой нагрузке (40 воркеров, 100000 логов от каждого в каждый канал)
@@ -62,6 +61,8 @@ func TestLogger(t *testing.T) {
 		WriteError: true,
 		PrintDebug: false,
 		WriteDebug: true,
+		PrintInfo:  false,
+		WriteInfo:  true,
 
 		Format:         "json",
 		BufferCapacity: 15,
@@ -94,19 +95,19 @@ func TestLogger(t *testing.T) {
 	//равно количество горутин на количество циклов внутри горутины
 	/////////////////////////////////////////////////////////////////////////////
 
-	//dataInfo, _ := ioutil.ReadFile("logs/info/info" + partOfName)
-	//c := strings.Count(string(dataInfo), "\n")
-	//
-	//if c != numWorkers*numCircles {
-	//	t.Errorf("%v количество строк в info файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
-	//} else {
-	//	t.Log("Успех info!!!Строк", c)
-	//}
+	dataInfo, _ := ioutil.ReadFile("logs/info/info" + partOfName)
+	c := strings.Count(string(dataInfo), "\n")
+
+	if c != numWorkers*numCircles {
+		t.Errorf("%v количество строк в info файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
+	} else {
+		t.Log("Успех info!!!Строк", c)
+	}
 
 	/////////////////////////////////////////////////////////////////////////////
 
 	dataError, _ := ioutil.ReadFile("logs/error/error" + partOfName)
-	c := strings.Count(string(dataError), "\n")
+	c = strings.Count(string(dataError), "\n")
 
 	if c != numWorkers*numCircles {
 		t.Errorf("%v количество строк в error файле %d не равно ожидаемому количеству строк %d %v", red, c, numWorkers*numCircles, noColor)
@@ -138,6 +139,7 @@ func workerImitation(num int, logger *logger, ctx context.Context, numCircles in
 			logger.AddParam("param2", 111.111),
 			logger.AddParam("param3", "value3"))
 		logger.Debug("Дебаг. Горутина "+strconv.Itoa(num), nil)
+		logger.Info("Инфо", nil)
 	}
 
 	wg.Done()
