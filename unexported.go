@@ -223,7 +223,7 @@ func (l *logger) collectRecord(level string, msg string, err error, params ...st
 }
 
 func (l *logger) prepareToPrint(record *recordType) string {
-	if l.colorHeadings == true {
+	if l.color == true {
 		return makeMessageColorful(record)
 	}
 

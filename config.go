@@ -15,7 +15,7 @@ type LoggerConf struct {
 	Format         string `env:"LOGGER_FORMAT"`          //формат записываемых в файл логов (строка или джейсон)
 	BufferCapacity int    `env:"LOGGER_BUFFER_CAPACITY"` //размер буфера в который складываются логи пачкой из горутин перед записью в файл. лучшие результаты были при значении = 10-20
 	ChanCapacity   int    `env:"LOGGER_CHAN_CAPACITY"`   //размер буфера каналов в которые поступают сообщения. сделал это чтобы не происходило блокировки горутины отправителя
-	ColorHeadings  bool   `env:"LOGGER_COLOR_HEADINGS"`  //раскрасить уровень лога для лучшей визуализации в консоли
+	Color          bool   `env:"LOGGER_COLOR"`           //раскрасить уровень лога для лучшей визуализации в консоли
 	DebugLog       bool   `env:"LOGGER_DEBUG_LOG"`       //дебаг логи самого логгера
 	PathFolder     string `env:"LOGGER_PATH_FOLDER"`     //папка для сохранения логов
 }

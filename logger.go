@@ -8,9 +8,9 @@ import (
 )
 
 type ILogger interface {
-	Info(msg string)  //Информационные сообщения о ходе работы программы
-	Debug(msg string) //Сообщения отладки
-	Error(msg string) //Ошибка в ходе работы программы
+	Info(msg string, err error, params ...string)  //Информационные сообщения о ходе работы программы
+	Debug(msg string, err error, params ...string) //Сообщения отладки
+	Error(msg string, err error, params ...string) //Ошибка в ходе работы программы
 
 	Stop()
 }
@@ -20,7 +20,7 @@ type logger struct {
 	debugChan chan *recordType
 	errorChan chan *recordType
 
-	bufferCapacity int //предел заполненности слайса, после которого логги из него будут считаны и отправлены на сортировку
+	bufferCapacity int
 	chanCapacity   int
 
 	printInfo  bool
@@ -31,11 +31,11 @@ type logger struct {
 	writeError bool
 	writeDebug bool
 
-	format        string
-	writeTimout   uint
-	withoutWrite  bool
-	pathFolder    string
-	colorHeadings bool //вкл/выкл покраску заголовков в файлах логов. покрашенные заголовки упрощают чтение лога из консоли
+	format       string
+	writeTimout  uint
+	withoutWrite bool
+	pathFolder   string
+	color        bool
 
 	//stop    bool
 	stopped chan struct{}
@@ -79,7 +79,7 @@ func New(config *LoggerConf) *logger {
 		format:         config.Format,
 		pathFolder:     config.PathFolder,
 		bufferCapacity: config.BufferCapacity,
-		colorHeadings:  config.ColorHeadings,
+		color:          config.Color,
 
 		wg:       wg,
 		stopped:  make(chan struct{}),
