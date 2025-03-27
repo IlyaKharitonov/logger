@@ -155,14 +155,10 @@ func (l *logger) prepareJSON(recordList []*recordType) []byte {
 			log.Fatal("(l *logger) prepareJSON ", err)
 		}
 
-		if len(list) == 0 {
-			list = append(list, "\n")
-		}
-
-		list = append(list, string(json))
+		list = append(list, string(json)+"\n")
 	}
 
-	return []byte(strings.Join(list, "\n"))
+	return []byte(strings.Join(list, ""))
 }
 
 func (l *logger) prepareString(recordList []*recordType) []byte {
@@ -182,14 +178,10 @@ func (l *logger) prepareString(recordList []*recordType) []byte {
 			recordString += ", Error: " + *r.Error
 		}
 
-		if len(list) == 0 {
-			list = append(list, "\n")
-		}
-
-		list = append(list, recordString)
+		list = append(list, recordString+"\n")
 	}
 
-	return []byte(strings.Join(list, "\n"))
+	return []byte(strings.Join(list, ""))
 }
 
 // сортирует логги из канала. отдает упорядоченный по таймштампу массив логгов

@@ -1,7 +1,7 @@
 package logger
 
 type recordType struct {
-	TimeUTC int64    `json:"timeUTC"` //нужно для сортировки
+	TimeUTC int64    `json:"timeUTC"`
 	Date    string   `json:"date"`
 	Level   string   `json:"level"`
 	Message string   `json:"message"`
